@@ -6,10 +6,14 @@ import util.Vector2;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Snake {
 
     private TaggedConnection connection;
+
+    private final Lock lock;
 
     private static int nextID = 1;
     private final int id;
@@ -19,6 +23,8 @@ public class Snake {
 
     public Snake(TaggedConnection connection, GameMap map) {
         this.connection = connection;
+
+        lock = new ReentrantLock();
 
         id = nextID++;
 
@@ -32,30 +38,38 @@ public class Snake {
 
     // Returns true if the food was eaten.
     public boolean update(GameMap map, Vector2 foodPos, List<GameChange> saveChangesHere) {
-        // Snake is dead.
-        if (body.size() == 0) return false;
+        try {
+            lock.lock();
 
-        // Move head
-        Vector2 newHead = body.get(0).clone().add(direction);
+            // Snake is dead.
+            if (body.size() == 0) return false;
 
-        // Check borders
-        int height = map.getHeight(), width = map.getWidth();
-        if (newHead.x < 0) newHead.x = height - 1;
-        else if (newHead.y < 0) newHead.y = width - 1;
-        else if (newHead.x >= height) newHead.x = 0;
-        else if (newHead.y >= width) newHead.y = 0;
+            // Move head
+            Vector2 newHead = body.get(0).clone().add(direction);
 
-        body.add(0, newHead);
-        saveChangesHere.add(new GameChange(newHead, id));
+            // Check borders
+            int height = map.getHeight(), width = map.getWidth();
+            if (newHead.x < 0) newHead.x = height - 1;
+            else if (newHead.y < 0) newHead.y = width - 1;
+            else if (newHead.x >= height) newHead.x = 0;
+            else if (newHead.y >= width) newHead.y = 0;
 
-        // Move tail
-        if (!newHead.equals(foodPos)) {
-            Vector2 oldEnd = body.remove(body.size() - 1);
-            saveChangesHere.add(new GameChange(oldEnd, 0));
-            return false;
+            body.add(0, newHead);
+            saveChangesHere.add(new GameChange(newHead, id));
+
+            // Move tail
+            if (!newHead.equals(foodPos)) {
+                Vector2 oldEnd = body.remove(body.size() - 1);
+                saveChangesHere.add(new GameChange(oldEnd, 0));
+                return false;
+            }
+
+            return true;
+
+        } finally {
+            lock.unlock();
         }
 
-        return true;
     }
 
     public List<GameChange> kill() {
@@ -77,15 +91,26 @@ public class Snake {
     }
 
     public Vector2 getDirection() {
-        return direction;
+        try {
+            lock.lock();
+            return direction;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public void setDirection(Vector2 direction) {
-        if (body.size() < 2) this.direction = direction;
-        else {
-            Vector2 cantGoInDir = body.get(1).clone().subtract(body.get(0));
-            if (!direction.equals(cantGoInDir)) this.direction = direction;
+        try {
+            lock.lock();
+            if (body.size() < 2) this.direction = direction;
+            else {
+                Vector2 cantGoInDir = body.get(1).clone().subtract(body.get(0));
+                if (!direction.equals(cantGoInDir)) this.direction = direction;
+            }
+        } finally {
+            lock.unlock();
         }
+
     }
 
     //endregion
